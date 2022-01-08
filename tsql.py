@@ -2,7 +2,15 @@ from sys import exit, argv
 from lark import Lark # ONLINE: https://www.lark-parser.org/ide/
 from enum import Enum, auto
 
+class DbType(Enum):
+    SQLite = auto(), # uses as in returning clauses
+    PostgresSQL = auto(), # uses into in returning clauses
+
+#TODO: ADD COMMANDLINE OPTION
+DB_TYPE = DbType.SQLite
+
 class Error(Enum):
+    # TODO: ADD CHECK FOR ONLY ONE PRIMARY KEY IN THE TABLE
     WrongColumnsCount = auto(),
     ColumnsCountInconsistent = auto(),
     DifferentTypesInColumn = auto(),
@@ -136,7 +144,7 @@ class Table:
         self.types = Table.check_column_types(name, columns, column_names)
         self.primaries = Table.check_primary_keys(name, columns, column_names, self.types)
         self.foreigns = Table.check_foreign_keys(name, columns, column_names, self.types)
-        print(self)
+        print(self, end='')
 
     def replace_type(type):
         if type == 'string':
@@ -149,17 +157,53 @@ class Table:
             return 'DECIMAL'
         return type
 
+    def into():
+        global DB_TYPE
+        if DB_TYPE == DbType.SQLite:
+            return 'AS'
+        if DB_TYPE == DbType.PostgresSQL:
+            return 'INTO'
+
     def __str__(self):
-        result = [f"CREATE TABLE {self.name} ("]
+        inner_tables = []
         for ((name, type), primary), foreign in \
          zip(zip(zip(self.column_names, self.types), self.primaries), self.foreigns):
             if primary:
-                result.append(f'    {name} SERIAL PRIMARY KEY,')
+                inner_tables.append(f'    {name} SERIAL PRIMARY KEY')
             elif foreign is not None:
-                result.append(f'    {name} INTEGER REFERENCES {foreign[0]}({foreign[1]}),')
+                inner_tables.append(f'    {name} INTEGER REFERENCES {foreign[0]}({foreign[1]})')
             else:
-                result.append(f'    {name} {Table.replace_type(type)} NOT NULL,')
-        result.append(');\n')
+                inner_tables.append(f'    {name} {Table.replace_type(type)} NOT NULL')
+        result = [f'CREATE TABLE {self.name} (\n' + ',\n'.join(inner_tables) + '\n);\n']
+        for values in self.values:
+            columns_values = []
+            if len(values) == len(self.column_names) - 1:
+                column_names = self.column_names[1:]
+                primaries = self.primaries[1:]
+                foreigns = self.foreigns[1:]
+            else:
+                column_names = self.column_names
+                primaries = self.primaries
+                foreigns = self.foreigns
+            primary_identifier = None
+            for (((type, value), column), primary), foreign in \
+              zip(zip(zip(values, column_names), primaries), foreigns):
+                if primary:
+                    primary_identifier = (value, column)
+                    continue
+                if foreign:
+                    columns_values.append((column, value))
+                else:
+                    columns_values.append((column, value))
+            unzipped = list(zip(*columns_values))
+            columns = ', '.join(unzipped[0])
+            values = ', '.join(unzipped[1])
+            returning = ''
+            if primary_identifier is not None:
+                identifier, column = primary_identifier
+                returning = f' RETURNING {column} {Table.into()} {identifier}'
+            result.append(f'INSERT INTO {self.name} ({columns}) VALUES ({values}){returning};')
+        result.append('\n')
         return '\n'.join(result)
 
 
