@@ -80,6 +80,8 @@ class Table:
         primary_key_columns = []
         # short notation allows first column be completely empty
         if len(columns) == len(column_names) - 1:
+            column_names = column_names[1:]
+            column_types = column_types[1:]
             primary_key_columns.append(True)
         for (column, column_name), column_type in zip(zip(columns, column_names), column_types):
             if column_type != 'variable':
@@ -101,6 +103,8 @@ class Table:
     def check_foreign_keys(table, columns, column_names, column_types):
         foreign_key_columns = []
         if len(columns) == len(column_names) - 1:
+            column_names = column_names[1:]
+            column_types = column_types[1:]
             foreign_key_columns.append(None)
         for (column, column_name), column_type in zip(zip(columns, column_names), column_types):
             foreign_key_columns.append(None)
@@ -147,7 +151,6 @@ class Table:
 
     def __str__(self):
         result = [f"CREATE TABLE {self.name} ("]
-        print(self.column_names, self.types, self.primaries, self.foreigns)
         for ((name, type), primary), foreign in \
          zip(zip(zip(self.column_names, self.types), self.primaries), self.foreigns):
             if primary:
