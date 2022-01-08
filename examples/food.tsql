@@ -1,0 +1,16 @@
+{ Category }
+[ id ] [ name ]
+america "America"
+na "North America"
+sa "South America"
+
+{ CategoryAdjacencies }
+[ parent_id] [ child_id ]
+america na
+america sa
+
+{ Product }
+[ id ] [ name ] [ category_id ] [ price ]
+"Tomato" na 24
+"Ananas" sa 12
+"Apple" america 30  -- grows in both
