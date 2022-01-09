@@ -1,7 +1,12 @@
 # ToySQL
 Simple language to define your sql tables and initialize them with testing data.
-Based on data it automatically assigns correct types and key constraints.
+ToySQL automatically assigns correct types and key constraints.
 
+## Instalation
+* Install `Python 3+` and Lark using `pip install Lark`.
+* Use python3 to run `tsql.py [-s|--sql] [PostgreSQL|SqlLite] file1.tsql file2.tsql ...`
+
+## Example
 ToySQL Input
 ```sql
 { category }

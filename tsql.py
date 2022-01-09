@@ -16,7 +16,7 @@ class AutoName(Enum):
         return name
 
 class DbType(AutoName):
-    #TODO: Add ORACLE and MariaDB, MySQL https://sqliteonline.com/
+    # TODO: Add ORACLE and MariaDB, MySQL https://sqliteonline.com/
     PostgreSQL = auto()
     SQLite = auto()
 
@@ -25,6 +25,7 @@ class DbType(AutoName):
         return [member.value for role, member in cls.__members__.items()]
 
 # TODO: ADD NULL SUPPORT AND DATETIME/TIMESTAMP SUPPORT
+# TODO: REPLACE DOUBLE QUOTED STRINGS TO SINGLE QUOTED
 grammar = Lark(r'''
 // A bunch of tables
 start: table+
