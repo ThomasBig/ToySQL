@@ -2,13 +2,6 @@ from sys import exit, argv
 from lark import Lark # ONLINE: https://www.lark-parser.org/ide/
 from enum import Enum, auto
 
-class DbType(Enum):
-    SQLite = auto(), # uses as in returning clauses
-    PostgresSQL = auto(), # uses into in returning clauses
-
-#TODO: ADD COMMANDLINE OPTION
-DB_TYPE = DbType.SQLite
-
 class Error(Enum):
     # TODO: ADD CHECK FOR ONLY ONE PRIMARY KEY IN THE TABLE
     WrongColumnsCount = auto(),
@@ -17,6 +10,19 @@ class Error(Enum):
     KnownVariableInPrimaryColumn = auto(),
     UnknownVariableInForeignColumn = auto(),
     WrongVariableInForeignColumn = auto(),
+
+class AutoName(Enum):
+    def _generate_next_value_(name, start, count, last_values):
+        return name
+
+class DbType(AutoName):
+    #TODO: Add ORACLE and MariaDB, MySQL https://sqliteonline.com/
+    PostgreSQL = auto()
+    SQLite = auto()
+
+    @classmethod
+    def list(cls):
+        return [member.value for role, member in cls.__members__.items()]
 
 # TODO: ADD NULL SUPPORT AND DATETIME/TIMESTAMP SUPPORT
 grammar = Lark(r'''
@@ -57,6 +63,7 @@ def syntax(fname):
 
 class Table:
     variables = {}
+    db_type = DbType.PostgreSQL
 
     def check_column_counts(name, columns, values):
         row_sizes = [len(row) for row in values]
@@ -155,21 +162,25 @@ class Table:
             return 'FLOAT'
         if type == 'decimal':
             return 'DECIMAL'
+        exit(f'Internal Error: Unrecognised type {type}')
         return type
 
-    def into():
-        global DB_TYPE
-        if DB_TYPE == DbType.SQLite:
-            return 'AS'
-        if DB_TYPE == DbType.PostgresSQL:
-            return 'INTO'
+    def quote(string):
+        return string.replace('"', "'")
+
+    def serial():
+        if Table.db_type == DbType.PostgreSQL:
+            return 'SERIAL PRIMARY KEY'
+        if Table.db_type == DbType.SQLite:
+            return 'INTEGER PRIMARY KEY AUTOINCREMENT'
+        exit(f'Internal Error: Unrecognised db type {Table.db_type}')
 
     def __str__(self):
         inner_tables = []
         for ((name, type), primary), foreign in \
          zip(zip(zip(self.column_names, self.types), self.primaries), self.foreigns):
             if primary:
-                inner_tables.append(f'    {name} SERIAL PRIMARY KEY')
+                inner_tables.append(f'    {name} {Table.serial()}')
             elif foreign is not None:
                 inner_tables.append(f'    {name} INTEGER REFERENCES {foreign[0]}({foreign[1]})')
             else:
@@ -185,27 +196,24 @@ class Table:
                 column_names = self.column_names
                 primaries = self.primaries
                 foreigns = self.foreigns
-            primary_identifier = None
+            foreign_link = None
             for (((type, value), column), primary), foreign in \
               zip(zip(zip(values, column_names), primaries), foreigns):
                 if primary:
-                    primary_identifier = (value, column)
                     continue
                 if foreign:
-                    columns_values.append((column, value))
+                    columns_values.append((column, str(1 + Table.variables[value][2])))
                 else:
-                    columns_values.append((column, value))
+                    columns_values.append((column, Table.quote(value)))
             unzipped = list(zip(*columns_values))
             columns = ', '.join(unzipped[0])
             values = ', '.join(unzipped[1])
-            returning = ''
-            if primary_identifier is not None:
-                identifier, column = primary_identifier
-                returning = f' RETURNING {column} {Table.into()} {identifier}'
-            result.append(f'INSERT INTO {self.name} ({columns}) VALUES ({values}){returning};')
+            if foreign_link is None:
+                result.append(f'INSERT INTO {self.name} ({columns}) VALUES ({values});')
+            else:
+                result.append(str(foreign_link))
         result.append('\n')
         return '\n'.join(result)
-
 
 def semantics(tree):
     tables = []
@@ -217,11 +225,41 @@ def semantics(tree):
         tables.append(Table(name.value, columns, values))
     return tables
 
-if __name__ == "__main__":
-    if len(argv) == 1:
-        print("Please provide at least one source file")
+def get_flags(args):
+    arguments = []
+    flags = []
+    isFlag = False
+    for argument in args[1:]:
+        if isFlag:
+            flags[-1] = (flags[-1], argument)
+            isFlag = False
+        elif argument.startswith('-'):
+            isFlag = True
+            flags.append(argument)
+        else:
+            arguments.append(argument)
+    if isFlag:
+        print(f'Value was not found for flag {flags[-1]}.')
+        exit()
+    return arguments, flags
 
-    for fname in argv[1:]:
+if __name__ == '__main__':
+    if len(argv) == 1:
+        print('Please provide at least one source file')
+        sys.exit()
+    (fnames, flags) = get_flags(argv)
+    supported = ', '.join(DbType.list())
+    for (flag, value) in flags:
+        if flag != '-s' and flag != '--sql':
+            print(f'Unrecognised flag {flag}. Currently supported only -s and --sql.')
+            exit()
+        if flag == '-s' or flag == '--sql':
+            if value not in DbType.list():
+                print(f'Unsupported database {value}. Currently supported {supported}. '
+                      f'You can try one of those. If it doesn\'t work, create an issue.')
+                exit()
+            Table.db_type = DbType[value]
+    for fname in fnames:
         tree = syntax(fname)
         tables = semantics(tree)
         tables
