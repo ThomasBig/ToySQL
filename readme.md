@@ -2,6 +2,7 @@
 Simple language to define your sql tables and initialize them with testing data.
 Based on data it automatically assigns correct types and key constraints.
 
+ToySQL Input
 ```sql
 { category }
 [ id ] [ name ]
@@ -21,11 +22,35 @@ america sa
 "Apple" america 30  -- grows in both
 ```
 
-Generated SQL
+SQL Output (default is PostgreSQL)
 ```sql
-CREATE TABLE category (
-
+CREATE TABLE Category (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
 );
+
+INSERT INTO Category (name) VALUES ('America');
+INSERT INTO Category (name) VALUES ('North America');
+INSERT INTO Category (name) VALUES ('South America');
+
+CREATE TABLE CategoryAdjacencies (
+    parent_id INTEGER REFERENCES Category(id),
+    child_id INTEGER REFERENCES Category(id)
+);
+
+INSERT INTO CategoryAdjacencies (parent_id, child_id) VALUES (1, 2);
+INSERT INTO CategoryAdjacencies (parent_id, child_id) VALUES (1, 3);
+
+CREATE TABLE Product (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    category_id INTEGER REFERENCES Category(id),
+    price INTEGER NOT NULL
+);
+
+INSERT INTO Product (name, category_id, price) VALUES ('Tomato', 2, 24);
+INSERT INTO Product (name, category_id, price) VALUES ('Ananas', 3, 12);
+INSERT INTO Product (name, category_id, price) VALUES ('Apple', 1, 30);
 ```
 
 ## Syntax
@@ -41,7 +66,7 @@ CREATE TABLE category (
 `1999T10:50` defines datetime
 * `NULL` defines nullable field
 
-How are primary and foreign keys set up?
+## Primary and foreign keys
 * new unknown variables in column make column be a primary serial key
 * already known variables in column make column be a foreign key
 * mix-matching known and unknown variables in column raises compilation error.
