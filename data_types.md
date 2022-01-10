@@ -7,9 +7,9 @@
 ## Character types
 | examples | sql names | explanation | enforcement rules |
 | - | - | - | - |
-| `'C'` | char | single ascii char | column is single character long and contains only ascii characters
+| `'STC'` | char | single ascii char | column has fixed size and contains only ascii characters
 | `'chars'` | varchars | multiple ascii chars | column contains only ascii characters
-| `'😊'` | nchar | single unicode char | column is single character long
+| `'😊'` | nchar | single unicode char | column has fixed size
 | `'أحبك'` | nchar varying | multiple unicode chars | -
 | `"many chars"` | clob, text | character large object | -
 | `"コンピューター"` | nlob, unicode text | national character large object | -
@@ -25,21 +25,21 @@
 ## Number types
 | examples | sql names | explanation | enforcement rules |
 | - | - | - | - |
-|`32120` | smallint | small whole number | range [-32_768;32_767]
-|`163752` | int, integer, mediumint | medium sized whole number | range [-2_147_483_648;2_147_483_647]
-|`5e30` | bigint | large whole number | column contains integers
-|`5.14` | decimal, numeric | precise base 10 fraction | -
-|`5.14'` | real | imprecise floating point number float[24] | range [-3.40e+38;-1.18e-38] or [1.18e-38;3.40e+38]
-|`1.5e-20'` | double, double precision | higher precise floating point numbers float[53] | -
+|`32120`, `1_123`, `1e4` | smallint | small whole number | range [-32_768;32_767]
+|`163752`, `163_752`, `3e6` | int, integer, mediumint | medium sized whole number | range [-2_147_483_648;2_147_483_647]
+|`8_732_563_107`, `5e30` | bigint | large whole number | column contains integers
+|`5.14`, `8.16`, `0.75` | decimal, numeric | precise base 10 fraction | -
+|`5.14'`, `1.2e8'` `NAN`, `-INF` | real | imprecise floating point number float[24] | range [-3.40e+38;-1.18e-38] or [1.18e-38;3.40e+38]
+|`1.5e-40', 8e200` | double, double precision | higher precise floating point numbers float[53] | -
 
 ## Dates and times
 | examples | sql names | format |
 | - | - | - |
 | `2030-6-10`, `2025-12-15` | date | YYYY-[M]M-[D]D |
 |`10:30:15`, `8:45:20.155` | time | [H]H:[M]M:[S]S[.F] |
-|`2025-12-15T`, `2025-12-15T10:30:15` | datetime | YYYY-[M]M-[D]DT[[H]H:[M]M:[S]S[.F]] |
+|`2025-12-15T`, `2025-12-15T10:30:15`, `2025-8-11T1:30:5+3` | datetime | YYYY-[M]M-[D]DT[[[H]H:[M]M:[S]S[.F]][Z]\(+\|-\)H[H][:M[M]]] |
 | `2025-12-15P`, `2025-12-15P10:30:15` | timestamp | YYYY-[M]M-[D]DP[[H]H:[M]M:[S]S[.F]] |
-| `-0-0-5I`, `+8-10-15I10:20:00` | interval | [sign]Ys-Ms-DsI[Hs:Ms:Ss[.Fs]]
+| `-0-0-5I`, `+8-10-15I10:20:00` | interval | \(+\|-\)Ys-Ms-DsI[Hs:Ms:Ss[.Fs]]
 
 ## Special types
 * at the moment anything is not checked and outer xml tag is not used in insert
