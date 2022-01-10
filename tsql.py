@@ -24,37 +24,51 @@ class DbType(AutoName):
     def list(cls):
         return [member.value for role, member in cls.__members__.items()]
 
-# TODO: ADD NULL SUPPORT AND DATETIME/TIMESTAMP SUPPORT
-# TODO: REPLACE DOUBLE QUOTED STRINGS TO SINGLE QUOTED
+
 grammar = Lark(r'''
 // A bunch of tables
-start: table+
+start: table (_NL table)* _NL*
 
 // Each table is defined from name in curly brackets, columns and values
-table: "{" WORD "}" "\n" columns "\n" data "\n"?
-columns: ("[" WORD "]")+
-data: row+
-row: value+ "\n"
-?value: variable | string | number
+table: _LCB WORD _RCB "\n" columns "\n" data
+columns: (_LSB WORD _RSB)+
+data: (row "\n")+
+row: value (_S value)*
+?value: variable | string | number | datetime
+
+// variable
 variable: WORD
+
+// string
+INNER_STRING: /.*?/ /(?<!\\)(\\\\)*?/
+ESCAPED_STRING: "'" INNER_STRING "'" | "\"" INNER_STRING "\""
 string: ESCAPED_STRING
-?number: float | decimal | int
-float: FLOAT
-decimal: DECIMAL
-int: SIGNED_INT
+
+// number
+number: SIGNED_INT -> int | FLOAT -> float
+FLOAT: SIGNED_INT "." INT
+
+// datetime
+datetime: DATE -> date | TIME -> time | TIMESTAMP -> timestamp
+DATE: INT "." INT "." INT
+TIME: INT ":" INT ":" INT
+TIMESTAMP: DATE "T" TIME?
+
+// brackets
+_LCB: _S* "{" _S*
+_RCB: _S* "}" _S*
+_LSB: _S* "[" _S*
+_RSB: _S* "]" _S*
+_S: " " | "\t"
+_NL: "\n"+ | "\r\n"+
 
 // imports from common library
 WORD: ("a".."z" | "A".."Z" | "_")+
-%import common.WS
-%import common.ESCAPED_STRING
 %import common.SIGNED_INT
-%import common.SQL_COMMENT
-%import common.FLOAT
-%import common.DECIMAL
+%import common.INT
 
+SQL_COMMENT: _S* /--[^\n]*/
 // disregard spaces and comments in text
-%ignore " "
-%ignore "\n\n"
 %ignore SQL_COMMENT
 ''')
 
