@@ -2,21 +2,20 @@ from sys import exit, argv
 from lark import Lark # ONLINE: https://www.lark-parser.org/ide/
 from enum import Enum, auto
 
-class Error(Enum):
-    # TODO: ADD CHECK FOR ONLY ONE PRIMARY KEY IN THE TABLE
-    WrongColumnsCount = auto(),
-    ColumnsCountInconsistent = auto(),
-    DifferentTypesInColumn = auto(),
-    KnownVariableInPrimaryColumn = auto(),
-    UnknownVariableInForeignColumn = auto(),
-    WrongVariableInForeignColumn = auto(),
-
 class AutoName(Enum):
     def _generate_next_value_(name, start, count, last_values):
         return name
 
+class Error(AutoName):
+    WrongColumnsCount = auto()
+    ColumnsCountInconsistent = auto()
+    DifferentTypesInColumn = auto()
+    KnownVariableInPrimaryColumn = auto()
+    UnknownVariableInForeignColumn = auto()
+    WrongVariableInForeignColumn = auto()
+
 class DbType(AutoName):
-    # TODO: Add ORACLE and MariaDB, MySQL https://sqliteonline.com/
+    # TODO: Add Oracle and MySQL https://sqliteonline.com/
     PostgreSQL = auto()
     SQLite = auto()
 
@@ -25,40 +24,42 @@ class DbType(AutoName):
         return [member.value for role, member in cls.__members__.items()]
 
 
-grammar = Lark(r'''
-// A bunch of tables
+grammar = Lark(r'''// A bunch of tables
 start: table (_NL table)* _NL*
 
 // Each table is defined from name in curly brackets, columns and values
 table: _LCB WORD _RCB "\n" columns "\n" data
 columns: (_LSB WORD _RSB)+
 data: (row "\n")+
-row: value (_S value)*
-?value: string | null | boolean | date_time | float | integer | variable
+row: value (_S+ value)*
+?value: string | null | boolean | date_time | timestamp | float | integer | variable
 
 // variable
 variable: WORD
 
 // null
-null: "NULL"
+!null: "NULL"
 
 // boolean
-boolean: true | false
-true: "TRUE"
-false: "FALSE"
+!boolean: "TRUE" | "FALSE"
 
 // date_time
-?date_time: offset_date_time | local_date_time | local_date | local_time
+// YYYY-[M]M-[D]D[T[H]H:[M]M:[S]S[.F]]
+?date_time: OFFSET_TIME -> offset_datetime | DATE_TIME -> datetime | FULL_DATE -> date | PARTIAL_TIME -> time
 
-_time_offset: "Z"i | ( "+" | "-" ) DIGIT2 ":" DIGIT2
-_partial_time: DIGIT2 ":" DIGIT2 ":" DIGIT2 [ "." DIGIT+ ] // 01-12 // 01-28, 01-29, 01-30, 01-31 based on month|year
-_full_date: DIGIT4 "-" DIGIT2 "-" DIGIT2
-_full_time: _partial_time _time_offset
+TIME_OFFSET: "Z"i | ( "+" | "-" ) DIGIT2 ":" DIGIT2
+PARTIAL_TIME: DIGIT2 ":" DIGIT2 ":" DIGIT2 [ "." DIGIT+ ] // 01-12 // 01-28, 01-29, 01-30, 01-31 based on month|year
+FULL_DATE: DIGIT4 "-" DIGIT2 "-" DIGIT2
+FULL_TIME: PARTIAL_TIME TIME_OFFSET
+OFFSET_TIME: FULL_DATE "T"i FULL_TIME?
+DATE_TIME: FULL_DATE "T"i PARTIAL_TIME?
 
-offset_date_time: _full_date "T"i _full_time
-local_date_time: _full_date "T"i _partial_time
-local_date: _full_date
-local_time: _partial_time
+// timestamp
+timestamp: TIMESTAMP
+TIMESTAMP: FULL_DATE "P" PARTIAL_TIME?
+
+// TODO: interval
+// [sign]Y-M [sign]D [sign]H:M:S[.F]
 
 // integer
 integer: DEC_INT | HEX_INT | OCT_INT | BIN_INT
@@ -79,7 +80,7 @@ float: FLOAT
 FLOAT: DEC_INT ( EXP | "." ZERO_PREFIXABLE_INT [ EXP ] ) | SPECIAL_FLOAT
 ZERO_PREFIXABLE_INT: DIGIT *( DIGIT | "_" DIGIT )
 EXP: "e" [ "-" | "+" ] ZERO_PREFIXABLE_INT
-SPECIAL_FLOAT: [ "-" | "+" ] ( "inf" | "nan" )
+SPECIAL_FLOAT: [ "-" | "+" ] ( "INF" | "NAN" )
 
 
 // brackets
@@ -92,15 +93,13 @@ _NL: "\n"+ | "\r\n"+
 
 // imports from common library
 DIGIT: "0".."9"
-DIGIT4: /[0-9]{4}/
-DIGIT2: /[0-9]{2}/
+DIGIT4: /[0-9]{4}/  // regex groups digits together
+DIGIT2: /[0-9]{1,2}/
 HEXDIG: DIGIT | "A"i | "B"i | "C"i | "D"i | "E"i | "F"i
 WORD: ("a".."z" | "A".."Z" | "_")+
-%import common.SIGNED_INT
-%import common.INT
 
+// disregard comments in text
 SQL_COMMENT: _S* /--[^\n]*/
-// disregard spaces and comments in text
 %ignore SQL_COMMENT
 ''')
 
@@ -135,7 +134,7 @@ class Table:
                 if not is_correct_type:
                     exit(f'{Error.DifferentTypesInColumn}: '
                          f'In table `{table}`, {type} `{value}` was found '
-                         f'in {column_type} column `{column_name}`!')
+                         f'in {types[-1]} column `{column_name}`!')
         return types
 
     def check_primary_keys(table, columns, column_names, column_types):
@@ -201,37 +200,60 @@ class Table:
         print(self, end='')
 
     def replace_type(type):
+        # TODO: Add enforcement rules
         if type == 'string':
             return 'VARCHAR(255)'
-        if type == 'int':
+        if type == 'boolean':
+            return 'BOOLEAN'
+        if type == 'integer':
             return 'INTEGER'
         if type == 'float':
-            return 'FLOAT'
-        if type == 'decimal':
-            return 'DECIMAL'
+            return 'REAL'
+        if type == 'timestamp':
+            return 'TIMESTAMP'
         exit(f'Internal Error: Unrecognised type {type}')
         return type
 
-    def quote(string):
-        return string.replace('"', "'")
+    def replace_value(type, value):
+        if type == 'string':
+            return value.replace('"', "'")
+        if type == 'timestamp':
+            return value.replace('P', ' ')
+        if type == 'datetime':
+            return value.replace('T', ' ')
+        return value
 
-    def serial():
+    def serial(unique):
+        primary = 'PRIMARY' if unique else ''
         if Table.db_type == DbType.PostgreSQL:
-            return 'SERIAL PRIMARY KEY'
+            return f'SERIAL {primary} KEY'
         if Table.db_type == DbType.SQLite:
-            return 'INTEGER PRIMARY KEY AUTOINCREMENT'
+            return f'INTEGER {primary} KEY AUTOINCREMENT'
         exit(f'Internal Error: Unrecognised db type {Table.db_type}')
 
     def __str__(self):
         inner_tables = []
+        primary_single_column = sum(self.primaries) == 1
         for ((name, type), primary), foreign in \
          zip(zip(zip(self.column_names, self.types), self.primaries), self.foreigns):
             if primary:
-                inner_tables.append(f'    {name} {Table.serial()}')
+                inner_tables.append(f'    {name} {Table.serial(primary_single_column)}')
             elif foreign is not None:
                 inner_tables.append(f'    {name} INTEGER REFERENCES {foreign[0]}({foreign[1]})')
             else:
                 inner_tables.append(f'    {name} {Table.replace_type(type)} NOT NULL')
+        if not primary_single_column:
+            zipped_keys = []
+            if sum(self.primaries) > 1:
+                zipped_keys = filter(lambda x: x[1], zip(self.column_names, self.primaries))
+            elif sum(map(lambda x: x is not None, self.foreigns)) > 0:
+                zipped_keys = filter(lambda x: x[1] is not None, zip(self.column_names, self.foreigns))
+            else:
+                # no primary or foreign keys were found - use everything we have
+                zipped_keys = zip(self.column_names, self.column_names)
+            if zipped_keys:
+                keys = ", ".join(list(map(lambda x: x[0], zipped_keys)))
+                inner_tables.append(f'    PRIMARY KEY ({keys})')
         result = [f'CREATE TABLE {self.name} (\n' + ',\n'.join(inner_tables) + '\n);\n']
         for values in self.values:
             columns_values = []
@@ -251,7 +273,7 @@ class Table:
                 if foreign:
                     columns_values.append((column, str(1 + Table.variables[value][2])))
                 else:
-                    columns_values.append((column, Table.quote(value)))
+                    columns_values.append((column, Table.replace_value(type, value)))
             unzipped = list(zip(*columns_values))
             columns = ', '.join(unzipped[0])
             values = ', '.join(unzipped[1])
@@ -291,6 +313,7 @@ def get_flags(args):
     return arguments, flags
 
 if __name__ == '__main__':
+    # hide traceback: sys.tracebacklimit = 0
     if len(argv) == 1:
         print('Please provide at least one source file')
         sys.exit()

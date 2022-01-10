@@ -1,6 +1,8 @@
 # ToySQL
 Simple language to define your sql tables and initialize them with testing data.
-ToySQL automatically assigns correct types and key constraints.
+ToySQL automatically assigns correct types and key constraints. It is a more
+human readable version of SQL that supports creation of tables and insertion
+to them with variables.
 
 ## Instalation
 * Install `Python 3+` and Lark using `pip install Lark`.
@@ -9,18 +11,18 @@ ToySQL automatically assigns correct types and key constraints.
 ## Example
 ToySQL Input
 ```sql
-{ category }
+{ Category }
 [ id ] [ name ]
 america "America"
 na "North America"
 sa "South America"
 
-{ categoryAdjecencies }
-[ parent_id] [ child_id ]
+{ CategoryAdjecencies }
+[ parent_id ] [ child_id ]
 america na
 america sa
 
-{ product }
+{ Product }
 [ id ] [ name ] [ category_id ] [ price ]
 "Tomato" na 24
 "Ananas" sa 12
@@ -67,12 +69,11 @@ INSERT INTO Product (name, category_id, price) VALUES ('Apple', 1, 30);
 * `5` defines an integer
 `5.6` defines an decimal
 `3.14'` defines a real number
-* `1999T` defines date
+* `1999-5-28T` defines date
 `1999T10:50` defines datetime
 * `NULL` defines nullable field
+* All [supported types](data_types.md)
 
 ## Primary and foreign keys
 * new unknown variables in column make column be a primary serial key
 * already known variables in column make column be a foreign key
-* mix-matching known and unknown variables in column raises compilation error.
-* mix-matching variables and constants raises compilation error
