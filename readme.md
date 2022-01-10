@@ -1,8 +1,7 @@
 # ToySQL
-Simple language to define your sql tables and initialize them with testing data.
-ToySQL automatically assigns correct types and key constraints. It is a more
-human readable version of SQL that supports creation of tables and insertion
-to them with variables.
+ToySQL is code generation tool for SQL. Define your sql tables and initialize
+them with testing data. ToySQL automatically assigns correct types and key
+constraints. It is a more human readable version of SQL with variable support.
 
 ## Instalation
 * Install `Python 3+` and Lark using `pip install Lark`.
