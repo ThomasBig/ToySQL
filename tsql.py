@@ -34,25 +34,53 @@ table: _LCB WORD _RCB "\n" columns "\n" data
 columns: (_LSB WORD _RSB)+
 data: (row "\n")+
 row: value (_S value)*
-?value: variable | string | number | datetime
+?value: string | null | boolean | date_time | float | integer | variable
 
 // variable
 variable: WORD
 
+// null
+null: "NULL"
+
+// boolean
+boolean: true | false
+true: "TRUE"
+false: "FALSE"
+
+// date_time
+?date_time: offset_date_time | local_date_time | local_date | local_time
+
+_time_offset: "Z"i | ( "+" | "-" ) DIGIT2 ":" DIGIT2
+_partial_time: DIGIT2 ":" DIGIT2 ":" DIGIT2 [ "." DIGIT+ ] // 01-12 // 01-28, 01-29, 01-30, 01-31 based on month|year
+_full_date: DIGIT4 "-" DIGIT2 "-" DIGIT2
+_full_time: _partial_time _time_offset
+
+offset_date_time: _full_date "T"i _full_time
+local_date_time: _full_date "T"i _partial_time
+local_date: _full_date
+local_time: _partial_time
+
+// integer
+integer: DEC_INT | HEX_INT | OCT_INT | BIN_INT
+
+DEC_INT: [ "-" | "+" ] DIGIT | "1".."9" ( DIGIT | "_" DIGIT )+
+HEX_INT: "0x" HEXDIG *( HEXDIG | "_" HEXDIG )
+OCT_INT: "0o" "0".."7" *( "0".."7" | "_" "0".."7" )
+BIN_INT: "0b" "0".."1" *( "0".."1" | "_" "0".."1" )
+
 // string
-INNER_STRING: /.*?/ /(?<!\\)(\\\\)*?/
-ESCAPED_STRING: "'" INNER_STRING "'" | "\"" INNER_STRING "\""
+// TODO: national alphabets
 string: ESCAPED_STRING
+ESCAPED_STRING: "'" INNER_STRING "'" | "\"" INNER_STRING "\""
+INNER_STRING: /.*?/ /(?<!\\)(\\\\)*?/
 
-// number
-number: SIGNED_INT -> int | FLOAT -> float
-FLOAT: SIGNED_INT "." INT
+// float
+float: FLOAT
+FLOAT: DEC_INT ( EXP | "." ZERO_PREFIXABLE_INT [ EXP ] ) | SPECIAL_FLOAT
+ZERO_PREFIXABLE_INT: DIGIT *( DIGIT | "_" DIGIT )
+EXP: "e" [ "-" | "+" ] ZERO_PREFIXABLE_INT
+SPECIAL_FLOAT: [ "-" | "+" ] ( "inf" | "nan" )
 
-// datetime
-datetime: DATE -> date | TIME -> time | TIMESTAMP -> timestamp
-DATE: INT "." INT "." INT
-TIME: INT ":" INT ":" INT
-TIMESTAMP: DATE "T" TIME?
 
 // brackets
 _LCB: _S* "{" _S*
@@ -63,6 +91,10 @@ _S: " " | "\t"
 _NL: "\n"+ | "\r\n"+
 
 // imports from common library
+DIGIT: "0".."9"
+DIGIT4: /[0-9]{4}/
+DIGIT2: /[0-9]{2}/
+HEXDIG: DIGIT | "A"i | "B"i | "C"i | "D"i | "E"i | "F"i
 WORD: ("a".."z" | "A".."Z" | "_")+
 %import common.SIGNED_INT
 %import common.INT
