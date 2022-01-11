@@ -32,7 +32,7 @@ start: table (_NL table)* _NL*
 table: _LCB WORD _RCB "\n" columns "\n" data
 columns: (_LSB WORD _RSB)+
 data: (row "\n")+
-row: value (_S+ value)*
+row: value (_S+ value)* _S*
 ?value: string | null | boolean | date_time | timestamp | float | integer | variable | constant
 
 // variables and constants
@@ -66,7 +66,7 @@ TIMESTAMP: FULL_DATE "P" PARTIAL_TIME?
 // integer
 integer: DEC_INT | HEX_INT | OCT_INT | BIN_INT
 
-DEC_INT: [ "-" | "+" ] DIGIT | "1".."9" ( DIGIT | "_" DIGIT )+
+DEC_INT: [ "-" | "+" ] (DIGIT | "1".."9" ( DIGIT | "_" DIGIT )+)
 HEX_INT: "0x" HEXDIG *( HEXDIG | "_" HEXDIG )
 OCT_INT: "0o" "0".."7" *( "0".."7" | "_" "0".."7" )
 BIN_INT: "0b" "0".."1" *( "0".."1" | "_" "0".."1" )
@@ -97,9 +97,9 @@ DIGIT: "0".."9"
 DIGIT4: /[0-9]{4}/  // regex groups digits together
 DIGIT2: /[0-9]{1,2}/
 HEXDIG: DIGIT | "A"i | "B"i | "C"i | "D"i | "E"i | "F"i
-WORD: ("a".."z" | "A".."Z" | "_")+
-LOWER_WORD: "a".."z" WORD*
-UPPER_WORD: "A".."Z" WORD*
+WORD: ("a".."z" | "A".."Z") ("a".."z" | "A".."Z" | "_" | "0".."9")*
+LOWER_WORD: "a".."z" ("a".."z" | "A".."Z" | "_" | "0".."9")*
+UPPER_WORD: "A".."Z" ("a".."z" | "A".."Z" | "_" | "0".."9")*
 
 // disregard comments in text
 SQL_COMMENT: _S* /--[^\n]*/
@@ -113,6 +113,7 @@ def syntax(fname):
 class Table:
     variables = {}
     db_type = DbType.PostgreSQL
+    no_create = False
 
     def check_column_counts(name, columns, values):
         row_sizes = [len(row) for row in values]
@@ -232,9 +233,9 @@ class Table:
 
     def replace_value(type, value):
         if type == 'string':
-            return value.replace('"', "'")
+            return value.replace('"', "'").replace("\\'", "''")
         if type == 'timestamp':
-            return value.replace('P', ' ')
+            return f"'{value.replace('P', ' ')}'"
         if type == 'datetime':
             return value.replace('T', ' ')
         return value
@@ -247,7 +248,7 @@ class Table:
             return f'INTEGER{primary} AUTOINCREMENT'
         exit(f'Internal Error: Unrecognised db type {Table.db_type}')
 
-    def __str__(self):
+    def tables_enums(self):
         enums = []
         for column in self.types:
             # find constant columns
@@ -276,7 +277,14 @@ class Table:
             if zipped_keys:
                 keys = ", ".join(list(map(lambda x: x[0], zipped_keys)))
                 inner_tables.append(f'    PRIMARY KEY ({keys})')
-        result = ['\n'.join(enums), f'CREATE TABLE {self.name} (\n' + ',\n'.join(inner_tables) + '\n);\n']
+        return '\n'.join(enums) + f'CREATE TABLE {self.name} (\n' + ',\n'.join(inner_tables) + '\n);\n'
+
+    def __str__(self):
+        if Table.no_create:
+            # PostgreSQL way
+            result = [f'TRUNCATE {self.name} RESTART IDENTITY CASCADE;']
+        else:
+            result = [self.tables_enums()]
         for values in self.values:
             columns_values = []
             if len(values) == len(self.column_names) - 1:
@@ -342,15 +350,14 @@ if __name__ == '__main__':
     (fnames, flags) = get_flags(argv)
     supported = ', '.join(DbType.list())
     for (flag, value) in flags:
-        if flag != '-s' and flag != '--sql':
-            print(f'Unrecognised flag {flag}. Currently supported only -s and --sql.')
-            exit()
         if flag == '-s' or flag == '--sql':
             if value not in DbType.list():
                 print(f'Unsupported database {value}. Currently supported {supported}. '
                       f'You can try one of those. If it doesn\'t work, create an issue.')
                 exit()
             Table.db_type = DbType[value]
+        if flag == '-u' or flag == '--update':
+            Table.no_create = True
     for fname in fnames:
         tree = syntax(fname)
         tables = semantics(tree)
