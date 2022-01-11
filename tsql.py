@@ -24,7 +24,8 @@ class DbType(AutoName):
         return [member.value for role, member in cls.__members__.items()]
 
 
-grammar = Lark(r'''// A bunch of tables
+grammar = Lark(r'''
+// A bunch of tables
 start: table (_NL table)* _NL*
 
 // Each table is defined from name in curly brackets, columns and values
@@ -32,10 +33,11 @@ table: _LCB WORD _RCB "\n" columns "\n" data
 columns: (_LSB WORD _RSB)+
 data: (row "\n")+
 row: value (_S+ value)*
-?value: string | null | boolean | date_time | timestamp | float | integer | variable
+?value: string | null | boolean | date_time | timestamp | float | integer | variable | constant
 
-// variable
-variable: WORD
+// variables and constants
+variable: LOWER_WORD
+constant: UPPER_WORD
 
 // null
 !null: "NULL"
@@ -82,7 +84,6 @@ ZERO_PREFIXABLE_INT: DIGIT *( DIGIT | "_" DIGIT )
 EXP: "e" [ "-" | "+" ] ZERO_PREFIXABLE_INT
 SPECIAL_FLOAT: [ "-" | "+" ] ( "INF" | "NAN" )
 
-
 // brackets
 _LCB: _S* "{" _S*
 _RCB: _S* "}" _S*
@@ -97,6 +98,8 @@ DIGIT4: /[0-9]{4}/  // regex groups digits together
 DIGIT2: /[0-9]{1,2}/
 HEXDIG: DIGIT | "A"i | "B"i | "C"i | "D"i | "E"i | "F"i
 WORD: ("a".."z" | "A".."Z" | "_")+
+LOWER_WORD: "a".."z" WORD*
+UPPER_WORD: "A".."Z" WORD*
 
 // disregard comments in text
 SQL_COMMENT: _S* /--[^\n]*/
@@ -115,17 +118,21 @@ class Table:
         row_sizes = [len(row) for row in values]
         min_row = min(row_sizes)
         if min_row != len(columns) and min_row + 1 != len(columns):
-            exit(f'{Error.WrongColumnsCount}: Number of columns in'
+            exit(f'{Error.WrongColumnsCount}: Number of columns in '
                  f'`{name}` table is not equal to defined number of columns!')
         if min_row != max(row_sizes):
-            exit(f'{Error.ColumnsCountInconsistent}: Number of columns'
+            exit(f'{Error.ColumnsCountInconsistent}: Number of columns '
                  f'in {name} table is not consistent!')
 
     def check_column_types(table, columns, column_names):
         types = []
         if len(columns) == len(column_names) - 1:
             types.append('variable')
+        enum_variants = []
         for column, column_name in zip(columns, column_names):
+            if len(enum_variants) > 1:
+                types[-1] = (types[-1] , enum_variants[0], enum_variants[1:])
+            enum_variants = [column_name]
             types.append(None)
             for type, value in column:
                 if types[-1] is None:
@@ -135,6 +142,10 @@ class Table:
                     exit(f'{Error.DifferentTypesInColumn}: '
                          f'In table `{table}`, {type} `{value}` was found '
                          f'in {types[-1]} column `{column_name}`!')
+                if type == 'constant':
+                     enum_variants.append(value)
+        if len(enum_variants) > 1:
+            types[-1] = (types[-1] , enum_variants[0], enum_variants[1:])
         return types
 
     def check_primary_keys(table, columns, column_names, column_types):
@@ -199,18 +210,23 @@ class Table:
         self.foreigns = Table.check_foreign_keys(name, columns, column_names, self.types)
         print(self, end='')
 
-    def replace_type(type):
+    def get_enum_name(self, column):
+        return self.name.upper() + '_' + column[1].upper()
+
+    def replace_type(self, c_type):
         # TODO: Add enforcement rules
-        if type == 'string':
+        if c_type == 'string':
             return 'VARCHAR(255)'
-        if type == 'boolean':
+        if c_type == 'boolean':
             return 'BOOLEAN'
-        if type == 'integer':
+        if c_type == 'integer':
             return 'INTEGER'
-        if type == 'float':
+        if c_type == 'float':
             return 'REAL'
-        if type == 'timestamp':
+        if c_type == 'timestamp':
             return 'TIMESTAMP'
+        if type(c_type) is tuple and c_type[0] == 'constant':
+            return self.get_enum_name(c_type)
         exit(f'Internal Error: Unrecognised type {type}')
         return type
 
@@ -224,24 +240,30 @@ class Table:
         return value
 
     def serial(unique):
-        primary = 'PRIMARY' if unique else ''
+        primary = ' PRIMARY KEY' if unique else ''
         if Table.db_type == DbType.PostgreSQL:
-            return f'SERIAL {primary} KEY'
+            return f'SERIAL{primary}'
         if Table.db_type == DbType.SQLite:
-            return f'INTEGER {primary} KEY AUTOINCREMENT'
+            return f'INTEGER{primary} AUTOINCREMENT'
         exit(f'Internal Error: Unrecognised db type {Table.db_type}')
 
     def __str__(self):
+        enums = []
+        for column in self.types:
+            # find constant columns
+            if type(column) is tuple:
+                variants = ', '.join(map(lambda x: f"'{x}'", column[2]))
+                enums.append(f'CREATE TYPE {self.get_enum_name(column)} AS ENUM (\n  {variants}\n);\n')
         inner_tables = []
         primary_single_column = sum(self.primaries) == 1
-        for ((name, type), primary), foreign in \
+        for ((name, c_type), primary), foreign in \
          zip(zip(zip(self.column_names, self.types), self.primaries), self.foreigns):
             if primary:
                 inner_tables.append(f'    {name} {Table.serial(primary_single_column)}')
             elif foreign is not None:
                 inner_tables.append(f'    {name} INTEGER REFERENCES {foreign[0]}({foreign[1]})')
             else:
-                inner_tables.append(f'    {name} {Table.replace_type(type)} NOT NULL')
+                inner_tables.append(f'    {name} {self.replace_type(c_type)} NOT NULL')
         if not primary_single_column:
             zipped_keys = []
             if sum(self.primaries) > 1:
@@ -254,7 +276,7 @@ class Table:
             if zipped_keys:
                 keys = ", ".join(list(map(lambda x: x[0], zipped_keys)))
                 inner_tables.append(f'    PRIMARY KEY ({keys})')
-        result = [f'CREATE TABLE {self.name} (\n' + ',\n'.join(inner_tables) + '\n);\n']
+        result = ['\n'.join(enums), f'CREATE TABLE {self.name} (\n' + ',\n'.join(inner_tables) + '\n);\n']
         for values in self.values:
             columns_values = []
             if len(values) == len(self.column_names) - 1:
@@ -266,14 +288,14 @@ class Table:
                 primaries = self.primaries
                 foreigns = self.foreigns
             foreign_link = None
-            for (((type, value), column), primary), foreign in \
+            for (((c_type, value), column), primary), foreign in \
               zip(zip(zip(values, column_names), primaries), foreigns):
                 if primary:
                     continue
                 if foreign:
                     columns_values.append((column, str(1 + Table.variables[value][2])))
                 else:
-                    columns_values.append((column, Table.replace_value(type, value)))
+                    columns_values.append((column, Table.replace_value(c_type, value)))
             unzipped = list(zip(*columns_values))
             columns = ', '.join(unzipped[0])
             values = ', '.join(unzipped[1])

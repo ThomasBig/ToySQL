@@ -63,7 +63,8 @@ INSERT INTO Product (name, category_id, price) VALUES ('Apple', 1, 30);
 * `--` comment
 * `{ name }` defines new table with name.
 * `[ name ]` defines new column with a name, must succeed *table* or *column* definition.
-* `letters` defines new variable
+* `lowerCase` defines new variable
+* `UpperCase` defines new constant (enumeration)
 * `"String"` defines a new string
 * `5` defines an integer
 `5.6` defines an decimal
