@@ -193,6 +193,8 @@ class Table:
             return f"'{value.replace('P', ' ')}'"
         if type == 'datetime':
             return value.replace('T', ' ')
+        if type == 'constant':
+            return f"'{value}'"
         return value
 
     def serial(unique):
@@ -208,7 +210,7 @@ class Table:
         for column in self.types:
             # find constant columns
             if type(column) is tuple:
-                variants = ', '.join(map(lambda x: f"'{x}'", column[2]))
+                variants = ', '.join(set(map(lambda x: f"'{x}'", column[2])))
                 enums.append(f'CREATE TYPE {self.get_enum_name(column)} AS ENUM (\n  {variants}\n);\n\n')
         inner_tables = []
         primary_single_column = sum(self.primaries) == 1
