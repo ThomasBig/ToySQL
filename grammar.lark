@@ -1,0 +1,79 @@
+// A bunch of tables
+start: table (_NL table)* _NL*
+
+// Each table is defined from name in curly brackets, columns and values
+table: (SQL_COMMENT | "\n")* _LCB WORD _RCB "\n" columns "\n" data
+columns: (_LSB WORD _RSB)+
+data: (row "\n")+
+row: value (_S+ value)* _S*
+?value: string | null | boolean | date_time | timestamp | float | integer | variable | constant
+
+// variables and constants
+variable: LOWER_WORD
+constant: UPPER_WORD
+
+// null
+!null: "NULL"
+
+// boolean
+!boolean: "TRUE" | "FALSE"
+
+// date_time
+// YYYY-[M]M-[D]D[T[H]H:[M]M:[S]S[.F]]
+?date_time: OFFSET_TIME -> offset_datetime | DATE_TIME -> datetime | FULL_DATE -> date | PARTIAL_TIME -> time
+
+TIME_OFFSET: "Z"i | ( "+" | "-" ) DIGIT2 ":" DIGIT2
+PARTIAL_TIME: DIGIT2 ":" DIGIT2 ":" DIGIT2 [ "." DIGIT+ ] // 01-12 // 01-28, 01-29, 01-30, 01-31 based on month|year
+FULL_DATE: DIGIT4 "-" DIGIT2 "-" DIGIT2
+FULL_TIME: PARTIAL_TIME TIME_OFFSET
+OFFSET_TIME: FULL_DATE "T"i FULL_TIME?
+DATE_TIME: FULL_DATE "T"i PARTIAL_TIME?
+
+// timestamp
+timestamp: TIMESTAMP
+TIMESTAMP: FULL_DATE "P" PARTIAL_TIME?
+
+// TODO: interval
+// [sign]Y-M [sign]D [sign]H:M:S[.F]
+
+// integer
+integer: DEC_INT | HEX_INT | OCT_INT | BIN_INT
+
+DEC_INT: [ "-" | "+" ] (DIGIT | "1".."9" ( DIGIT | "_" DIGIT )+)
+HEX_INT: "0x" HEXDIG *( HEXDIG | "_" HEXDIG )
+OCT_INT: "0o" "0".."7" *( "0".."7" | "_" "0".."7" )
+BIN_INT: "0b" "0".."1" *( "0".."1" | "_" "0".."1" )
+
+// string
+// TODO: national alphabets
+string: ESCAPED_STRING
+ESCAPED_STRING: "'" INNER_STRING "'" | "\"" INNER_STRING "\""
+INNER_STRING: /.*?/ /(?<!\\)(\\\\)*?/
+
+// float
+float: FLOAT
+FLOAT: DEC_INT ( EXP | "." ZERO_PREFIXABLE_INT [ EXP ] ) | SPECIAL_FLOAT
+ZERO_PREFIXABLE_INT: DIGIT *( DIGIT | "_" DIGIT )
+EXP: "e" [ "-" | "+" ] ZERO_PREFIXABLE_INT
+SPECIAL_FLOAT: [ "-" | "+" ] ( "INF" | "NAN" )
+
+// brackets
+_LCB: _S* "{" _S*
+_RCB: _S* "}" _S*
+_LSB: _S* "[" _S*
+_RSB: _S* "]" _S*
+_S: " " | "\t"
+_NL: "\n"+ | "\r\n"+
+
+// imports from common library
+DIGIT: "0".."9"
+DIGIT4: /[0-9]{4}/  // regex groups digits together
+DIGIT2: /[0-9]{1,2}/
+HEXDIG: DIGIT | "A"i | "B"i | "C"i | "D"i | "E"i | "F"i
+WORD: ("a".."z" | "A".."Z") ("a".."z" | "A".."Z" | "_" | "0".."9")*
+LOWER_WORD: "a".."z" ("a".."z" | "A".."Z" | "_" | "0".."9")*
+UPPER_WORD: "A".."Z" ("a".."z" | "A".."Z" | "_" | "0".."9")*
+
+// disregard comments in text
+SQL_COMMENT: _S* /--[^\n]*/
+%ignore SQL_COMMENT

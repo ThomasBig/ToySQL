@@ -1,6 +1,7 @@
-from sys import exit, argv
+from sys import exit, argv, path
 from lark import Lark # ONLINE: https://www.lark-parser.org/ide/
 from enum import Enum, auto
+import csv
 
 class AutoName(Enum):
     def _generate_next_value_(name, start, count, last_values):
@@ -13,6 +14,7 @@ class Error(AutoName):
     KnownVariableInPrimaryColumn = auto()
     UnknownVariableInForeignColumn = auto()
     WrongVariableInForeignColumn = auto()
+    ReservedKeyword = auto()
 
 class DbType(AutoName):
     # TODO: Add Oracle and MySQL https://sqliteonline.com/
@@ -23,88 +25,33 @@ class DbType(AutoName):
     def list(cls):
         return [member.value for role, member in cls.__members__.items()]
 
+class KeywordType():
+    Reserved = "reserved"
+    Semi = "semi reserved"
 
-grammar = Lark(r'''
-// A bunch of tables
-start: table (_NL table)* _NL*
+directory = path[0]
 
-// Each table is defined from name in curly brackets, columns and values
-table: _LCB WORD _RCB "\n" columns "\n" data
-columns: (_LSB WORD _RSB)+
-data: (row "\n")+
-row: value (_S+ value)* _S*
-?value: string | null | boolean | date_time | timestamp | float | integer | variable | constant
+def read_keywords():
+    keywords = {}
+    with open(f'{directory}/keywords.csv') as csv_file:
+        reader = csv.reader(csv_file, delimiter=' ', strict=True)
+        header = next(reader)
+        for row in reader:
+            try:
+                keywords[row[0]] = (header[row.index("reserved", 1)], KeywordType.Reserved)
+            except ValueError:
+                try:
+                    keywords[row[0]] = (header[row.index("semi-reserved", 1)], KeywordType.Semi)
+                except ValueError:
+                    continue
+    return keywords
 
-// variables and constants
-variable: LOWER_WORD
-constant: UPPER_WORD
+def read_grammar():
+    with open(f'{directory}/grammar.lark') as grammar:
+        return Lark(grammar)
 
-// null
-!null: "NULL"
-
-// boolean
-!boolean: "TRUE" | "FALSE"
-
-// date_time
-// YYYY-[M]M-[D]D[T[H]H:[M]M:[S]S[.F]]
-?date_time: OFFSET_TIME -> offset_datetime | DATE_TIME -> datetime | FULL_DATE -> date | PARTIAL_TIME -> time
-
-TIME_OFFSET: "Z"i | ( "+" | "-" ) DIGIT2 ":" DIGIT2
-PARTIAL_TIME: DIGIT2 ":" DIGIT2 ":" DIGIT2 [ "." DIGIT+ ] // 01-12 // 01-28, 01-29, 01-30, 01-31 based on month|year
-FULL_DATE: DIGIT4 "-" DIGIT2 "-" DIGIT2
-FULL_TIME: PARTIAL_TIME TIME_OFFSET
-OFFSET_TIME: FULL_DATE "T"i FULL_TIME?
-DATE_TIME: FULL_DATE "T"i PARTIAL_TIME?
-
-// timestamp
-timestamp: TIMESTAMP
-TIMESTAMP: FULL_DATE "P" PARTIAL_TIME?
-
-// TODO: interval
-// [sign]Y-M [sign]D [sign]H:M:S[.F]
-
-// integer
-integer: DEC_INT | HEX_INT | OCT_INT | BIN_INT
-
-DEC_INT: [ "-" | "+" ] (DIGIT | "1".."9" ( DIGIT | "_" DIGIT )+)
-HEX_INT: "0x" HEXDIG *( HEXDIG | "_" HEXDIG )
-OCT_INT: "0o" "0".."7" *( "0".."7" | "_" "0".."7" )
-BIN_INT: "0b" "0".."1" *( "0".."1" | "_" "0".."1" )
-
-// string
-// TODO: national alphabets
-string: ESCAPED_STRING
-ESCAPED_STRING: "'" INNER_STRING "'" | "\"" INNER_STRING "\""
-INNER_STRING: /.*?/ /(?<!\\)(\\\\)*?/
-
-// float
-float: FLOAT
-FLOAT: DEC_INT ( EXP | "." ZERO_PREFIXABLE_INT [ EXP ] ) | SPECIAL_FLOAT
-ZERO_PREFIXABLE_INT: DIGIT *( DIGIT | "_" DIGIT )
-EXP: "e" [ "-" | "+" ] ZERO_PREFIXABLE_INT
-SPECIAL_FLOAT: [ "-" | "+" ] ( "INF" | "NAN" )
-
-// brackets
-_LCB: _S* "{" _S*
-_RCB: _S* "}" _S*
-_LSB: _S* "[" _S*
-_RSB: _S* "]" _S*
-_S: " " | "\t"
-_NL: "\n"+ | "\r\n"+
-
-// imports from common library
-DIGIT: "0".."9"
-DIGIT4: /[0-9]{4}/  // regex groups digits together
-DIGIT2: /[0-9]{1,2}/
-HEXDIG: DIGIT | "A"i | "B"i | "C"i | "D"i | "E"i | "F"i
-WORD: ("a".."z" | "A".."Z") ("a".."z" | "A".."Z" | "_" | "0".."9")*
-LOWER_WORD: "a".."z" ("a".."z" | "A".."Z" | "_" | "0".."9")*
-UPPER_WORD: "A".."Z" ("a".."z" | "A".."Z" | "_" | "0".."9")*
-
-// disregard comments in text
-SQL_COMMENT: _S* /--[^\n]*/
-%ignore SQL_COMMENT
-''')
+keywords = read_keywords()
+grammar = read_grammar()
 
 def syntax(fname):
     with open(fname, 'r') as file:
@@ -200,7 +147,16 @@ class Table:
                          f'and not {"->".join(foreign_key_columns[-1])}!')
         return foreign_key_columns
 
+    def check_column_names(table, column_names):
+        for name in column_names:
+            lowercase = name.upper()
+            if lowercase in keywords:
+                where, what = keywords[lowercase]
+                print(f'{Error.ReservedKeyword}: In table {table} column {name} is {what} in {where}!')
+                exit()
+
     def __init__(self, name, column_names, values):
+        Table.check_column_names(name, column_names)
         Table.check_column_counts(name, column_names, values)
         columns = [[values[j][i] for j in range(len(values))] for i in range(len(values[0]))]
         self.name = name
@@ -209,7 +165,6 @@ class Table:
         self.types = Table.check_column_types(name, columns, column_names)
         self.primaries = Table.check_primary_keys(name, columns, column_names, self.types)
         self.foreigns = Table.check_foreign_keys(name, columns, column_names, self.types)
-        print(self, end='')
 
     def get_enum_name(self, column):
         return self.name.upper() + '_' + column[1].upper()
@@ -254,7 +209,7 @@ class Table:
             # find constant columns
             if type(column) is tuple:
                 variants = ', '.join(map(lambda x: f"'{x}'", column[2]))
-                enums.append(f'CREATE TYPE {self.get_enum_name(column)} AS ENUM (\n  {variants}\n);\n')
+                enums.append(f'CREATE TYPE {self.get_enum_name(column)} AS ENUM (\n  {variants}\n);\n\n')
         inner_tables = []
         primary_single_column = sum(self.primaries) == 1
         for ((name, c_type), primary), foreign in \
@@ -345,8 +300,8 @@ def get_flags(args):
 if __name__ == '__main__':
     # hide traceback: sys.tracebacklimit = 0
     if len(argv) == 1:
-        print('Please provide at least one source file')
-        sys.exit()
+        print('Please provide at least one source file.')
+        exit()
     (fnames, flags) = get_flags(argv)
     supported = ', '.join(DbType.list())
     for (flag, value) in flags:
@@ -361,4 +316,4 @@ if __name__ == '__main__':
     for fname in fnames:
         tree = syntax(fname)
         tables = semantics(tree)
-        tables
+        print(''.join(map(str, tables)), end='')
