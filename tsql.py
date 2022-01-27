@@ -219,7 +219,7 @@ class Table:
             if primary:
                 inner_tables.append(f'    {name} {Table.serial(primary_single_column)}')
             elif foreign is not None:
-                inner_tables.append(f'    {name} INTEGER REFERENCES {foreign[0]}({foreign[1]})')
+                inner_tables.append(f'    {name} INTEGER NOT NULL REFERENCES {foreign[0]}({foreign[1]})')
             else:
                 inner_tables.append(f'    {name} {self.replace_type(c_type)} NOT NULL')
         if not primary_single_column:
