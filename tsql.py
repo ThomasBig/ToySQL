@@ -262,12 +262,15 @@ class Table:
                 else:
                     columns_values.append((column, Table.replace_value(c_type, value)))
             unzipped = list(zip(*columns_values))
-            columns = ', '.join(unzipped[0])
-            values = ', '.join(unzipped[1])
-            if foreign_link is None:
-                result.append(f'INSERT INTO {self.name} ({columns}) VALUES ({values});')
+            if unzipped: # at least one value
+                columns = ', '.join(unzipped[0])
+                values = ', '.join(unzipped[1])
+                if foreign_link is None:
+                    result.append(f'INSERT INTO {self.name} ({columns}) VALUES ({values});')
+                else:
+                    result.append(str(foreign_link))
             else:
-                result.append(str(foreign_link))
+                result.append(f'INSERT INTO {self.name} DEFAULT VALUES;')
         result.append('\n')
         return '\n'.join(result)
 
