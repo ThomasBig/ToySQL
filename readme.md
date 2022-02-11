@@ -1,13 +1,32 @@
-![Logo](logo.svg)
+<div align="center">
+  <img src="logo.svg" width="200" />
+  <h3>SQL Generation Tool</h3>
+</div>
 
-# ToySQL
-ToySQL is code generation tool for SQL. Define your sql tables and initialize
-them with testing data. ToySQL automatically assigns correct types and key
-constraints. It is a more human readable version of SQL with variable support.
+## ToySQL
+Define your tables using friendly syntax with *type inheritence* and *variable
+support*. Initialize tables with *testing data* and boost your productivity.
+Moreover, ToySQL assigns *key constraints* for you. It is a human readable
+version of SQL inspired by TOML and table sheets.
 
 ## Instalation
 * Install `Python 3+` and Lark using `pip install Lark`.
 * Use python3 to run `tsql.py [-s|--sql] [PostgreSQL|SqlLite] file1.tsql file2.tsql ...`
+
+## Syntax
+* `--` comment
+* `{ name }` defines new table with name.
+* `[ name ]` defines new column with a name, must succeed *table* or *column* definition.
+* `lowerCase` defines new variable
+* `UpperCase` defines new constant (enumeration)
+* `"String"` defines a new string
+* `5` defines an integer
+`5.6` defines an decimal
+`3.14'` defines a real number
+* `1999-5-28T` defines date
+`1999T10:50` defines datetime
+* `NULL` defines nullable field
+* All [supported types](data_types.md)
 
 ## Example
 ToySQL Input
@@ -61,21 +80,6 @@ INSERT INTO Product (name, category_id, price) VALUES ('Ananas', 3, 12);
 INSERT INTO Product (name, category_id, price) VALUES ('Apple', 1, 30);
 ```
 
-## Syntax
-* `--` comment
-* `{ name }` defines new table with name.
-* `[ name ]` defines new column with a name, must succeed *table* or *column* definition.
-* `lowerCase` defines new variable
-* `UpperCase` defines new constant (enumeration)
-* `"String"` defines a new string
-* `5` defines an integer
-`5.6` defines an decimal
-`3.14'` defines a real number
-* `1999-5-28T` defines date
-`1999T10:50` defines datetime
-* `NULL` defines nullable field
-* All [supported types](data_types.md)
-
 ## Primary and foreign keys
-* new unknown variables in column make column be a primary serial key
-* already known variables in column make column be a foreign key
+* unknown variables in column make a primary key column
+* known variables in column make a foreign key column
