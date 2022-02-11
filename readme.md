@@ -1,3 +1,5 @@
+![Logo](logo.svg)
+
 # ToySQL
 ToySQL is code generation tool for SQL. Define your sql tables and initialize
 them with testing data. ToySQL automatically assigns correct types and key
